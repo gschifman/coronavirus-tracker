@@ -1,0 +1,58 @@
+covid_data <- read.csv(url("https://health.data.ny.gov/api/views/xdss-u53e/rows.csv?accessType=DOWNLOAD"), header=TRUE)
+
+library("dplyr")
+library("tidyr")
+
+colnames(covid_data) <- c("test_date","county","new_positives","cumulative_positives","new_tests","cumulative_tests")
+
+
+#Code to create data sets for charts
+covid_data$region <- case_when(
+    covid_data$county %in% c("Bronx","Kings","New York","Queens","Richmond") ~ "New York City",
+    covid_data$county %in% c("Nassau","Suffolk") ~ "Long Island",
+    covid_data$county %in% c("Westchester","Rockland","Orange","Putnam","Dutchess") ~ "Lower Hudson Valley",
+    !(covid_data$count %in% c("Bronx","Kings","New York","Queens","Richmond","Nassau","Suffolk","Westchester","Rockland","Orange","Putnam","Dutchess")) ~ "zRest",
+    TRUE ~ as.character(covid_data$county)
+)
+
+covid_positives <- covid_data %>%
+    group_by(test_date, region) %>%
+    summarise(total_positives=sum(cumulative_positives, na.rm=TRUE)) %>% 
+    spread(region, total_positives)
+
+covid_positives <- covid_positives[,c(1,4,3,2)]
+covid_positives <- arrange(covid_positives, test_date)
+
+
+covid_tests <- covid_data %>%
+    group_by(test_date, region) %>%
+    summarise(total_tests=sum(cumulative_tests, na.rm=TRUE)) %>% 
+    spread(region, total_tests)
+
+covid_tests <- covid_tests[,c(1,4,3,2)]
+covid_tests <- arrange(covid_tests, test_date)
+
+
+covid_boroughs <- covid_data[covid_data$county %in% c("Bronx","Kings","New York","Queens","Richmond"),] %>%
+    group_by(county) %>%
+    summarise(county_cases=max(cumulative_positives, na.rm=TRUE))
+
+covid_boroughs$county <- case_when(
+    	covid_boroughs$county=="Bronx" ~ "Bronx",
+    	covid_boroughs$county=="Kings" ~ "Brooklyn",
+    	covid_boroughs$county=="New York" ~ "Manhattan",
+    	covid_boroughs$county=="Queens" ~ "Queens",
+    	covid_boroughs$county=="Richmond" ~ "Staten Island",
+    	TRUE ~ as.character(covid_boroughs$county))
+
+#Data for positive cases, tests, and boroughs can be exported with the write.table() function
+
+
+#Various calculations that appear in the tracker
+paste("New metro-area cases:", formatC(sum(covid_data[covid_data$region!="zRest" & as.Date(covid_data$test_date, "%m/%d/%Y")==Sys.Date()-1,]$new_positives), format="f", big.mark=",", digits=0))
+paste("City positive rate:",round((sum(covid_data[covid_data$region=="New York City",]$new_positives)/sum(covid_data$new_positives))*100,0),"%")
+paste("Total cases:",formatC(sum(covid_data$new_positives), format="f", big.mark=",", digits=0))
+
+
+paste("Positive rate:",round((sum(covid_data$new_positives)/sum(covid_data$new_tests))*100,0),"%")
+paste("Test rate: 1 in",round((19453561/(sum(covid_data$new_tests))),0))
