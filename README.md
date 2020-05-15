@@ -1,0 +1,5 @@
+I use this R code to regularly update the coronavirus tracker at Crain's New York Business. It downloads the data from the state's Open Data portal and structures it to assess daily rolling totals of coronavirus cases and tests. It also the assesses number of cases by borough and provides other figures that help readers put the state of the virus into context.
+
+The tracker is in front of our paywall and available <a href="https://www.crainsnewyork.com/tracking-coronavirus-new-york">at this link</a>. It's also regularly featured in our print editions.
+
+Note that the tracker also contains data separate from this code and the Open Data portal. Hospitalization counts are released in daily briefings by Gov. Andrew Cuomo. Death and comorbidity figures are extracted from the handy Tableau workbook maintained by the state Department of Health; that can be found <a href="https://covid19tracker.health.ny.gov/views/NYS-COVID19-Tracker/NYSDOHCOVID-19Tracker-Fatalities?%3Aembed=yes&%3Atoolbar=no&%3Atabs=n">here</a>.
