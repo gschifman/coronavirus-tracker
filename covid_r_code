@@ -49,10 +49,12 @@ covid_boroughs$county <- case_when(
 
 
 #Various calculations that appear in the tracker
+Sys.setenv(TZ="America/New_York")
+
 paste("New metro-area cases:", formatC(sum(covid_data[covid_data$region!="zRest" & as.Date(covid_data$test_date, "%m/%d/%Y")==Sys.Date()-1,]$new_positives), format="f", big.mark=",", digits=0))
+
 paste("City positive rate:",round((sum(covid_data[covid_data$region=="New York City",]$new_positives)/sum(covid_data$new_positives))*100,0),"%")
 paste("Total cases:",formatC(sum(covid_data$new_positives), format="f", big.mark=",", digits=0))
-
 
 paste("Positive rate:",round((sum(covid_data$new_positives)/sum(covid_data$new_tests))*100,0),"%")
 paste("Test rate: 1 in",round((19453561/(sum(covid_data$new_tests))),0))
