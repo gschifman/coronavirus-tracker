@@ -9,12 +9,25 @@ covid_data$region <- case_when(
     covid_data$county %in% c("Bronx","Kings","New York","Queens","Richmond") ~ "New York City",
     covid_data$county %in% c("Nassau","Suffolk") ~ "Long Island",
     covid_data$county %in% c("Westchester","Rockland","Orange","Putnam","Dutchess") ~ "Lower Hudson Valley",
-    !(covid_data$county %in% c("Bronx","Kings","New York","Queens","Richmond","Nassau","Suffolk","Westchester","Rockland","Orange","Putnam","Dutchess")) ~ "zRest",
-    TRUE ~ as.character(covid_data$county)
-)
+    !(covid_data$county %in% c("Bronx","Kings","New York","Queens","Richmond","Nassau","Suffolk","Westchester","Rockland","Orange","Putnam","Dutchess")) ~ "zRest")
 
 
-#Code to create data sets for charts
+#Population figures
+census_data <- read.csv(url("https://www.census.gov/quickfacts/fact/csv/bronxcountybronxboroughnewyork,kingscountybrooklynboroughnewyork,newyorkcountymanhattanboroughnewyork,queenscountyqueensboroughnewyork,richmondcountystatenislandboroughnewyork,NY/PST120218"), header=TRUE)[1,c(3,5,7,9,11,13)]
+
+colnames(census_data) <- c("Bronx","Brooklyn","Manhattan","Queens","Staten Island","New York State")
+
+census_data$Bronx <- as.numeric(gsub(",","",census_data$Bronx))
+census_data$Brooklyn <- as.numeric(gsub(",","",census_data$Brooklyn))
+census_data$Manhattan <- as.numeric(gsub(",","",census_data$Manhattan))
+census_data$Queens <- as.numeric(gsub(",","",census_data$Queens))
+census_data$`Staten Island` <- as.numeric(gsub(",","",census_data$`Staten Island`))
+census_data$`New York State` <- as.numeric(gsub(",","",census_data$`New York State`))
+
+census_data <- gather(census_data, key="region", value="population_total")
+
+
+#Cumulative daily positives
 covid_positives <- covid_data %>%
     group_by(test_date, region) %>%
     summarise(total_positives=sum(cumulative_positives, na.rm=TRUE)) %>% 
@@ -24,6 +37,7 @@ covid_positives <- covid_positives[,c(1,4,3,2)]
 covid_positives <- arrange(covid_positives, test_date)
 
 
+#Cumulative daily tests
 covid_tests <- covid_data %>%
     group_by(test_date, region) %>%
     summarise(total_tests=sum(cumulative_tests, na.rm=TRUE)) %>% 
@@ -33,30 +47,32 @@ covid_tests <- covid_tests[,c(1,4,3,2)]
 covid_tests <- arrange(covid_tests, test_date)
 
 
+#Positive case rates by borough
 covid_boroughs <- covid_data[covid_data$county %in% c("Bronx","Kings","New York","Queens","Richmond"),] %>%
     group_by(county) %>%
     summarise(county_cases=max(cumulative_positives, na.rm=TRUE))
 
 covid_boroughs$county <- case_when(
-    	covid_boroughs$county=="Bronx" ~ "Bronx",
-    	covid_boroughs$county=="Kings" ~ "Brooklyn",
-    	covid_boroughs$county=="New York" ~ "Manhattan",
-    	covid_boroughs$county=="Queens" ~ "Queens",
-    	covid_boroughs$county=="Richmond" ~ "Staten Island",
-    	TRUE ~ as.character(covid_boroughs$county))
+        covid_boroughs$county=="Bronx" ~ "Bronx",
+        covid_boroughs$county=="Kings" ~ "Brooklyn",
+        covid_boroughs$county=="New York" ~ "Manhattan",
+        covid_boroughs$county=="Queens" ~ "Queens",
+        covid_boroughs$county=="Richmond" ~ "Staten Island")
 
-#Data for positive cases, tests, and boroughs can be exported with the write.table() function
+covid_boroughs <- inner_join(covid_boroughs, census_data, by=c("county"="region"))
+covid_boroughs$population_rate <- round(with(covid_boroughs, (population_total/county_cases)), digits=0)
+covid_boroughs$label_text <- with(covid_boroughs, paste(county," 1&nbsp;in&nbsp;",population_rate, sep=""))
+covid_boroughs <- covid_boroughs[,c(1,4,2,3,5)]
+
+#Data sets can be exported with the write.table() function
 
 
 #Various calculations that appear in the tracker
 Sys.setenv(TZ="America/New_York")
-
 paste("New metro-area cases:", formatC(sum(covid_data[covid_data$region!="zRest" & as.Date(covid_data$test_date, "%m/%d/%Y")==Sys.Date()-1,]$new_positives), format="f", big.mark=",", digits=0))
 
-paste("City positive rate:",round((sum(covid_data[covid_data$region=="New York City",]$new_positives)/sum(covid_data$new_positives))*100,0),"%")
-paste("Total cases:",formatC(sum(covid_data$new_positives), format="f", big.mark=",", digits=0))
+paste("Portion of positives in the city: ",round((sum(covid_data[covid_data$region=="New York City",]$new_positives)/sum(covid_data$new_positives))*100,0),"%", sep="")
+paste("Total state cases:",formatC(sum(covid_data$new_positives), format="f", big.mark=",", digits=0))
 
-paste("Positive rate:",round((sum(covid_data$new_positives)/sum(covid_data$new_tests))*100,0),"%")
-paste("Test rate: 1 in",round((19453561/(sum(covid_data$new_tests))),0))
-
-#The number above is the statewide population total
+paste("State rate of positive tests: ",round((sum(covid_data$new_positives)/sum(covid_data$new_tests))*100,0),"%", sep="")
+paste("State testing volume: 1 in",round((census_data[census_data$region=="New York State",]$population_total/(sum(covid_data$new_tests))),0))
