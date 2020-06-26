@@ -2,14 +2,15 @@ covid_data <- read.csv(url("https://health.data.ny.gov/api/views/xdss-u53e/rows.
 
 library("dplyr")
 library("tidyr")
+library("caTools")
 
 colnames(covid_data) <- c("test_date","county","new_positives","cumulative_positives","new_tests","cumulative_tests")
 
 covid_data$region <- case_when(
-    covid_data$county %in% c("Bronx","Kings","New York","Queens","Richmond") ~ "New York City",
-    covid_data$county %in% c("Nassau","Suffolk") ~ "Long Island",
-    covid_data$county %in% c("Westchester","Rockland","Orange","Putnam","Dutchess") ~ "Lower Hudson Valley",
-    !(covid_data$county %in% c("Bronx","Kings","New York","Queens","Richmond","Nassau","Suffolk","Westchester","Rockland","Orange","Putnam","Dutchess")) ~ "zRest")
+    covid_data$county %in% c("Bronx","Kings","New York","Queens","Richmond") ~ "new_york_city",
+    covid_data$county %in% c("Nassau","Suffolk") ~ "long_island",
+    covid_data$county %in% c("Dutchess","Orange","Putnam","Rockland","Westchester") ~ "lower_hudson_valley",
+    !(covid_data$county %in% c("Bronx","Kings","New York","Queens","Richmond","Nassau","Suffolk","Dutchess","Orange","Putnam","Rockland","Westchester")) ~ "zRest")
 
 
 #Population figures
@@ -27,24 +28,30 @@ census_data$`New York State` <- as.numeric(gsub(",","",census_data$`New York Sta
 census_data <- gather(census_data, key="region", value="population_total")
 
 
-#Cumulative daily positives
+#Daily positive diagnoses
 covid_positives <- covid_data %>%
     group_by(test_date, region) %>%
-    summarise(total_positives=sum(cumulative_positives, na.rm=TRUE)) %>% 
+    summarise(total_positives=sum(new_positives, na.rm=TRUE)) %>% 
     spread(region, total_positives)
 
 covid_positives <- covid_positives[,c(1,4,3,2)]
 covid_positives <- arrange(covid_positives, test_date)
+covid_positives$nyc_7day <- round(runmean(covid_positives$new_york_city, 7, align="right"), digits=0)
+covid_positives$lohud_7day <- round(runmean(covid_positives$lower_hudson_valley, 7, align="right"), digits=0)
+covid_positives$li_7day <- round(runmean(covid_positives$long_island, 7, align="right"), digits=0)
 
 
-#Cumulative daily tests
+#Daily tests
 covid_tests <- covid_data %>%
     group_by(test_date, region) %>%
-    summarise(total_tests=sum(cumulative_tests, na.rm=TRUE)) %>% 
+    summarise(total_tests=sum(new_tests, na.rm=TRUE)) %>% 
     spread(region, total_tests)
 
 covid_tests <- covid_tests[,c(1,4,3,2)]
 covid_tests <- arrange(covid_tests, test_date)
+covid_tests$nyc_7day <- round(runmean(covid_tests$new_york_city, 7, align="right"), digits=0)
+covid_tests$lohud_7day <- round(runmean(covid_tests$lower_hudson_valley, 7, align="right"), digits=0)
+covid_tests$li_7day <- round(runmean(covid_tests$long_island, 7, align="right"), digits=0)
 
 
 #Positive case rates by borough
@@ -64,15 +71,14 @@ covid_boroughs$population_rate <- round(with(covid_boroughs, (population_total/c
 covid_boroughs$label_text <- with(covid_boroughs, paste(county," 1&nbsp;in&nbsp;",population_rate, sep=""))
 covid_boroughs <- covid_boroughs[,c(1,4,2,3,5)]
 
-#Data sets can be exported with the write.table() function
+#Data frames can be exported with the write.table() function
 
 
 #Various calculations that appear in the tracker
 Sys.setenv(TZ="America/New_York")
 paste("New metro-area cases:", formatC(sum(covid_data[covid_data$region!="zRest" & as.Date(covid_data$test_date, "%m/%d/%Y")==Sys.Date()-1,]$new_positives), format="f", big.mark=",", digits=0))
 
-paste("Portion of positives in the city: ",round((sum(covid_data[covid_data$region=="New York City",]$new_positives)/sum(covid_data$new_positives))*100,0),"%", sep="")
+paste("Portion of positives in the city: ",round((sum(covid_data[covid_data$region=="new_york_city",]$new_positives)/sum(covid_data$new_positives))*100,0),"%", sep="")
 paste("Total state cases:",formatC(sum(covid_data$new_positives), format="f", big.mark=",", digits=0))
 
 paste("State rate of positive tests: ",round((sum(covid_data$new_positives)/sum(covid_data$new_tests))*100,0),"%", sep="")
-paste("State testing volume: 1 in",round((census_data[census_data$region=="New York State",]$population_total/(sum(covid_data$new_tests))),0))
