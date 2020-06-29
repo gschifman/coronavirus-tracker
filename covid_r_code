@@ -68,8 +68,26 @@ covid_boroughs$county <- case_when(
 
 covid_boroughs <- inner_join(covid_boroughs, census_data, by=c("county"="region"))
 covid_boroughs$population_rate <- round(with(covid_boroughs, (population_total/county_cases)), digits=0)
+#This HTML text is explicitly used in the Infogram dashboard
 covid_boroughs$label_text <- with(covid_boroughs, paste(county," 1&nbsp;in&nbsp;",population_rate, sep=""))
 covid_boroughs <- covid_boroughs[,c(1,4,2,3,5)]
+
+
+#Hospitalizations
+covid_hosp <- arrange(read.csv(url("https://covidtracking.com/api/v1/states/ny/daily.csv"), header=TRUE)[,c(1,6,17)], date)
+colnames(covid_hosp) <- c("as_of_date","current_hosp","total_deaths")
+covid_hosp <- covid_hosp[covid_hosp$as_of_date>=20200317,]
+covid_hosp$as_of_date <- as.Date(as.character(covid_hosp$as_of_date), "%Y%m%d")
+#By subtracting with one day, the Covid Tracking Project data will align with the state's reporting
+covid_hosp$as_of_date <- (covid_hosp$as_of_date-1)
+#These are corrections to Covid Tracking Project data points that don't match up with revised figures in the state hospitalization dashboard: https://forward.ny.gov/daily-hospitalization-summary-region
+covid_hosp[covid_hosp$as_of_date=="2020-04-14",2] <- 18335
+covid_hosp[covid_hosp$as_of_date=="2020-04-16",2] <- 17316
+covid_hosp[covid_hosp$as_of_date=="2020-04-20",2] <- 16135
+covid_hosp[covid_hosp$as_of_date=="2020-04-27",2] <- 12646
+covid_hosp[covid_hosp$as_of_date=="2020-05-04",2] <- 9600
+covid_hosp[covid_hosp$as_of_date=="2020-05-22",2] <- 4642
+
 
 #Data frames can be exported with the write.table() function
 
@@ -78,7 +96,10 @@ covid_boroughs <- covid_boroughs[,c(1,4,2,3,5)]
 Sys.setenv(TZ="America/New_York")
 paste("New metro-area cases:", formatC(sum(covid_data[covid_data$region!="zRest" & as.Date(covid_data$test_date, "%m/%d/%Y")==Sys.Date()-1,]$new_positives), format="f", big.mark=",", digits=0))
 
+
 paste("Portion of positives in the city: ",round((sum(covid_data[covid_data$region=="new_york_city",]$new_positives)/sum(covid_data$new_positives))*100,0),"%", sep="")
 paste("Total state cases:",formatC(sum(covid_data$new_positives), format="f", big.mark=",", digits=0))
+paste("Total state deaths:",formatC(max(covid_hosp$total_deaths), format="f", big.mark=",", digits=0))
+
 
 paste("State rate of positive tests: ",round((sum(covid_data$new_positives)/sum(covid_data$new_tests))*100,0),"%", sep="")
