@@ -6,6 +6,7 @@ library("caTools")
 
 colnames(covid_data) <- c("test_date","county","new_positives","cumulative_positives","new_tests","cumulative_tests")
 
+covid_data$test_date <- as.Date(covid_data$test_date, "%m/%d/%Y")
 covid_data$region <- case_when(
     covid_data$county %in% c("Bronx","Kings","New York","Queens","Richmond") ~ "new_york_city",
     covid_data$county %in% c("Nassau","Suffolk") ~ "long_island",
@@ -28,14 +29,15 @@ census_data$`New York State` <- as.numeric(gsub(",","",census_data$`New York Sta
 census_data <- gather(census_data, key="region", value="population_total")
 
 
+#A fair amount of the data manipulation in this script is executed to accommodate the current iteration of the dashboard in Infogram
+
 #Daily positive diagnoses
 covid_positives <- covid_data %>%
     group_by(test_date, region) %>%
-    summarise(total_positives=sum(new_positives, na.rm=TRUE)) %>% 
+    summarise(total_positives=sum(new_positives), .groups='keep') %>% 
     spread(region, total_positives)
 
-covid_positives <- covid_positives[,c(1,4,3,2)]
-covid_positives <- arrange(covid_positives, test_date)
+covid_positives <- arrange(covid_positives[,c(1,4,3,2)], test_date)
 covid_positives$nyc_7day <- round(runmean(covid_positives$new_york_city, 7, align="right"), digits=0)
 covid_positives$lohud_7day <- round(runmean(covid_positives$lower_hudson_valley, 7, align="right"), digits=0)
 covid_positives$li_7day <- round(runmean(covid_positives$long_island, 7, align="right"), digits=0)
@@ -44,11 +46,10 @@ covid_positives$li_7day <- round(runmean(covid_positives$long_island, 7, align="
 #Daily tests
 covid_tests <- covid_data %>%
     group_by(test_date, region) %>%
-    summarise(total_tests=sum(new_tests, na.rm=TRUE)) %>% 
+    summarise(total_tests=sum(new_tests), .groups='keep') %>% 
     spread(region, total_tests)
 
-covid_tests <- covid_tests[,c(1,4,3,2)]
-covid_tests <- arrange(covid_tests, test_date)
+covid_tests <- arrange(covid_tests[,c(1,4,3,2)], test_date)
 covid_tests$nyc_7day <- round(runmean(covid_tests$new_york_city, 7, align="right"), digits=0)
 covid_tests$lohud_7day <- round(runmean(covid_tests$lower_hudson_valley, 7, align="right"), digits=0)
 covid_tests$li_7day <- round(runmean(covid_tests$long_island, 7, align="right"), digits=0)
@@ -57,7 +58,7 @@ covid_tests$li_7day <- round(runmean(covid_tests$long_island, 7, align="right"),
 #Positive case rates by borough
 covid_boroughs <- covid_data[covid_data$county %in% c("Bronx","Kings","New York","Queens","Richmond"),] %>%
     group_by(county) %>%
-    summarise(county_cases=max(cumulative_positives, na.rm=TRUE))
+    summarise(county_cases=max(cumulative_positives), .groups='keep')
 
 covid_boroughs$county <- case_when(
         covid_boroughs$county=="Bronx" ~ "Bronx",
@@ -74,32 +75,35 @@ covid_boroughs <- covid_boroughs[,c(1,4,2,3,5)]
 
 
 #Hospitalizations
-covid_hosp <- arrange(read.csv(url("https://covidtracking.com/api/v1/states/ny/daily.csv"), header=TRUE)[,c(1,6,17)], date)
-colnames(covid_hosp) <- c("as_of_date","current_hosp","total_deaths")
-covid_hosp <- covid_hosp[covid_hosp$as_of_date>=20200317,]
+covid_hosp <- arrange(read.csv(url("https://covidtracking.com/api/v1/states/ny/daily.csv"), header=TRUE)[,c(1,6,8,17)], date)
+colnames(covid_hosp) <- c("as_of_date","current_hosp","current_icu","total_deaths")
+covid_hosp <- covid_hosp[covid_hosp$as_of_date>=20200326,]
 covid_hosp$as_of_date <- as.Date(as.character(covid_hosp$as_of_date), "%Y%m%d")
 #By subtracting with one day, the Covid Tracking Project data will align with the state's reporting
 covid_hosp$as_of_date <- (covid_hosp$as_of_date-1)
-#These are corrections to Covid Tracking Project data points that don't match up with revised figures in the state hospitalization dashboard: https://forward.ny.gov/daily-hospitalization-summary-region
-covid_hosp[covid_hosp$as_of_date=="2020-04-14",2] <- 18335
-covid_hosp[covid_hosp$as_of_date=="2020-04-16",2] <- 17316
-covid_hosp[covid_hosp$as_of_date=="2020-04-20",2] <- 16135
-covid_hosp[covid_hosp$as_of_date=="2020-04-27",2] <- 12646
-covid_hosp[covid_hosp$as_of_date=="2020-05-04",2] <- 9600
-covid_hosp[covid_hosp$as_of_date=="2020-05-22",2] <- 4642
+covid_hosp$current_non_icu <- with(covid_hosp, (current_hosp-current_icu))
+covid_hosp <- covid_hosp[,c(1,3,5,2,4)]
 
 
 #Data frames can be exported with the write.table() function
 
 
 #Various calculations that appear in the tracker
-Sys.setenv(TZ="America/New_York")
-paste("New metro-area cases:", formatC(sum(covid_data[covid_data$region!="zRest" & as.Date(covid_data$test_date, "%m/%d/%Y")==Sys.Date()-1,]$new_positives), format="f", big.mark=",", digits=0))
+paste("New metro-area cases:", formatC(sum(covid_data[covid_data$region!="zRest" & covid_data$test_date==max(covid_hosp$as_of_date),]$new_positives), format="f", big.mark=",", digits=0))
 
 
-paste("Portion of positives in the city: ",round((sum(covid_data[covid_data$region=="new_york_city",]$new_positives)/sum(covid_data$new_positives))*100,0),"%", sep="")
+paste("Portion of positives in the city: ",round((sum(covid_data[covid_data$region=="new_york_city",]$new_positives)/sum(covid_data$new_positives))*100, digits=1),"%", sep="")
 paste("Total state cases:",formatC(sum(covid_data$new_positives), format="f", big.mark=",", digits=0))
 paste("Total state deaths:",formatC(max(covid_hosp$total_deaths), format="f", big.mark=",", digits=0))
 
 
-paste("State rate of positive tests: ",round((sum(covid_data$new_positives)/sum(covid_data$new_tests))*100,0),"%", sep="")
+#Daily positivity rates
+#Leaving out 3/2, which had the small sample of just a single test
+covid_rates <- covid_data[covid_data$region!="zRest" & covid_data$test_date>"2020-03-02",] %>%
+    group_by(test_date) %>%
+    summarise(total_tests=sum(new_tests), daily_pos_rate=round((sum(new_positives)/sum(new_tests))*100,1), .groups='keep')
+
+
+paste("Peak metro-area positive rate: ", covid_rates[which.max(covid_rates$daily_pos_rate),]$daily_pos_rate,"% on ",months(covid_rates[which.max(covid_rates$daily_pos_rate),]$test_date)," ",format(covid_rates[which.max(covid_rates$daily_pos_rate),]$test_date,"%d"),sep="")
+paste("Overall metro-area positive test rate: ", with(covid_data[covid_data$region!="zRest",], round((sum(new_positives)/sum(new_tests))*100,1)),"%", sep="")
+paste("Yesterday's metro-area positive rate: ", round(with(covid_data[covid_data$region!="zRest" & covid_data$test_date==max(covid_hosp$as_of_date),], (sum(new_positives)/sum(new_tests)))*100,1),"%", sep="")
